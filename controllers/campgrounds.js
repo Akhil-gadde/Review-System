@@ -1,9 +1,9 @@
 const Campground=require('../models/campground');
 const {cloudinary}=require('../cloudinary/index');
-const mbxGeocoding= require("@mapbox/mapbox-sdk/services/geocoding");
-const mapBoxToken= process.env.MAPBOX_TOKEN;
-const geoCoder=mbxGeocoding({accessToken: mapBoxToken});
-
+// const mbxGeocoding= require("@mapbox/mapbox-sdk/services/geocoding");
+// const mapBoxToken= process.env.MAPBOX_TOKEN;
+// const geoCoder=mbxGeocoding({accessToken: mapBoxToken});
+const axios = require('axios');
 module.exports.index=async(req,res)=>{
     const campgrounds= await Campground.find();
     res.render('campgrounds/index',{campgrounds});
@@ -14,12 +14,24 @@ module.exports.renderNewForm=async (req,res,next)=>{
 };
 
 module.exports.createCampground= async (req,res,next)=>{
-    const geoData= await geoCoder.forwardGeocode({
-        query: req.body.campground.location,
-        limit: 1
-    }).send();
+    // const geoData= await geoCoder.forwardGeocode({
+    //     query: req.body.campground.location,
+    //     limit: 1
+    // }).send();
     const newcamp=new Campground(req.body.campground);
-    newcamp.geometry =geoData.body.features[0].geometry;
+    // newcamp.geometry =geoData.body.features[0].geometry;
+    const geoResponse = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
+    params: {
+        q: req.body.campground.location,
+        key: process.env.OPENCAGE_API_KEY
+    }
+    });
+
+    const geometry = geoResponse.data.results[0]?.geometry;
+    newcamp.geometry = {
+    type: "Point",
+    coordinates: [geometry.lng, geometry.lat]
+    };  
     newcamp.images= req.files.map( f=> ({url:f.path,filename: f.filename}));
     newcamp.author = req.user._id;
     const added= await newcamp.save();
@@ -49,12 +61,25 @@ module.exports.renderEditForm = async (req,res)=>{
 
 module.exports.updateCampground= async (req,res)=>{
     const {id}=req.params;
-    const geoData= await geoCoder.forwardGeocode({
-        query: req.body.campground.location,
-        limit: 1
-    }).send();
+    // const geoData= await geoCoder.forwardGeocode({
+    //     query: req.body.campground.location,
+    //     limit: 1
+    // }).send();
+    const geoResponse = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
+    params: {
+        q: req.body.campground.location,
+        key: process.env.OPENCAGE_API_KEY
+    }
+    });
+
+    const geometry = geoResponse.data.results[0]?.geometry;
+    campground.geometry = {
+    type: "Point",
+    coordinates: [geometry.lng, geometry.lat]
+    };
     const campground= await Campground.findByIdAndUpdate(id,{...req.body.campground});
-    campground.geometry =geoData.body.features[0].geometry;
+    // campground.geometry =geoData.body.features[0].geometry;
+    
     const imgs=req.files.map( f=> ({url:f.path,filename: f.filename}));
     campground.images.push(...imgs);
     if(req.body.deleteImages){
